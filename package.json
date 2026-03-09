@@ -1,0 +1,34 @@
+{
+  "name": "api-auth",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "nodemon index.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/El-magoXD/api-auth.git"
+  },
+  "author": "Pedro González Sánchez",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/El-magoXD/api-auth/issues"
+  },
+  "homepage": "https://github.com/El-magoXD/api-auth#readme",
+  "dependencies": {
+    "bcrypt": "^6.0.0",
+    "cors": "^2.8.6",
+    "express": "^5.2.1",
+    "helmet": "^8.1.0",
+    "jwt-simple": "^0.5.6",
+    "moment": "^2.30.1",
+    "mongodb": "^7.1.0",
+    "mongojs": "^3.1.0",
+    "morgan": "^1.10.1"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.14"
+  }
+}
