@@ -9,11 +9,11 @@ const cors = require("cors");
 const fs = require("fs");
 const https = require("https");
 const helmet = require("helmet");
+const TokenHelper = require("./helpers/token.helper");
 
 // Declaraciones
 const port = config.PORT;
 const urlDB = config.DB;
-const accessToken = config.TOKEN;
 const app = express();
 const db = mongojs(urlDB); // Enlazamos con la DB
 const id = mongojs.ObjectID; // Función para convertir un id textual en un objectID
@@ -36,26 +36,22 @@ var allowCrossTokenHeaders = (req, res, next) => {
 
 // middleware
 var auth = (req, res, next) => {
-  // declaramos la función auth
-  if (!req.headers.token) {
-    // si no se envía el token...
-    res.status(401).json({
-      result: "KO",
-      msg: "Envía un código válido en la cabecera 'token'",
-    });
-    return;
-  }
 
-  const queToken = req.headers.token; // recogemos el token de la cabecera llamada “token”
+  const queToken = req.headers.authorization.split(" ")[1];
 
-  if (queToken === accessToken) {
-    // si coincide con nuestro password...
-    return next();
-    //
-  } else {
-    // en caso contrario...
-    res.status(401).json({ result: "KO", msg: "No autorizado" });
-  }
+  TokenHelper.decodificaToken(queToken).then(
+    (userID) => {
+      req.user = {
+        token: queToken,
+        id: userID,
+      };
+      return next(); // Pasamos el testigo al controlador de la ruta
+    },
+    (err) => {
+      res.status(401);
+      res.json({ result: "KO", msg: `No autorizado: ${err.msg}` });
+    },
+  );
 };
 
 // middlewares
