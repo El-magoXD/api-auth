@@ -10,6 +10,7 @@ const fs = require("fs");
 const https = require("https");
 const helmet = require("helmet");
 const TokenHelper = require("./helpers/token.helper");
+const bcrypt = require("bcrypt");
 
 // Declaraciones
 const port = config.PORT;
@@ -36,8 +37,12 @@ var allowCrossTokenHeaders = (req, res, next) => {
 
 // middleware
 var auth = (req, res, next) => {
+  const authorization = req.headers.authorization;
+  if (!authorization || !authorization.startsWith("Bearer ")) {
+    return res.status(401).json({ result: "KO", msg: "No autorizado" });
+  }
 
-  const queToken = req.headers.authorization.split(" ")[1];
+  const queToken = authorization.split(" ")[1];
 
   TokenHelper.decodificaToken(queToken).then(
     (userID) => {
@@ -73,11 +78,102 @@ app.get("/api/user", auth, (req, res, next) => {
   });
 });
 
+app.get("/api/auth", auth, (req, res, next) => {
+  // Devolvemos sólo email y displayName (sin _id)
+  db.user.find({}, { email: 1, displayName: 1, _id: 0 }, (err, coleccion) => {
+    if (err) return res.status(500).json({ result: "KO", msg: err });
+    res.json({ result: "OK", usuarios: coleccion });
+  });
+});
+
 app.get("/api/user/:id", auth, (req, res, next) => {
   const elementoId = req.params.id;
-  db.user.findOne({ _id: id(elementoId) }, (err, elementoRecuperado) => {
-    if (err) res.status(500).json({ result: "KO", msg: err });
+  db.user.findOne({ _id: elementoId }, (err, elementoRecuperado) => {
+    if (err) return res.status(500).json({ result: "KO", msg: err });
     res.json(elementoRecuperado);
+  });
+});
+
+app.get("/api/auth/me", auth, (req, res, next) => {
+  const elementoId = req.user.id;
+  db.user.findOne({ _id: id(elementoId) }, (err, elementoRecuperado) => {
+    if (err) return res.status(500).json({ result: "KO", msg: err });
+    if (!elementoRecuperado)
+      return res
+        .status(404)
+        .json({ result: "KO", msg: "Usuario no encontrado" });
+
+    res.json({ result: "OK", usuario: elementoRecuperado });
+  });
+});
+
+app.post("/api/auth/reg", (req, res, next) => {
+  const { name, email, pass } = req.body;
+  if (!name || !email || !pass) {
+    return res
+      .status(400)
+      .json({ result: "KO", msg: "Faltan campos requeridos" });
+  }
+  db.user.findOne({ email }, (err, existingUser) => {
+    if (err) return res.status(500).json({ result: "KO", msg: err });
+    if (existingUser) {
+      return res
+        .status(400)
+        .json({ result: "KO", msg: "El email ya está registrado" });
+    }
+    bcrypt.hash(pass, 10, (err, hashedPass) => {
+      if (err) return res.status(500).json({ result: "KO", msg: err });
+      const newUser = {
+        displayName: name,
+        email,
+        password: hashedPass,
+        signupDate: Math.floor(Date.now() / 1000),
+        lastLogin: Math.floor(Date.now() / 1000),
+      };
+      db.user.save(newUser, (err, savedUser) => {
+        if (err) return res.status(500).json({ result: "KO", msg: err });
+        const token = TokenHelper.creaToken(savedUser);
+        res.json({ result: "OK", token, usuario: savedUser });
+      });
+    });
+  });
+});
+
+app.post("/api/auth/login", (req, res, next) => {
+  const { email, pass } = req.body;
+  if (!email || !pass) {
+    return res.status(400).json({
+      result: "KO",
+      msg: "Debe suministrar un correo y una contraseña",
+    });
+  }
+  db.user.findOne({ email }, (err, user) => {
+    if (err) return res.status(500).json({ result: "KO", msg: err });
+    if (!user) {
+      return res.status(401).json({
+        result: "KO",
+        msg: "El usuario no está registrado o la contraseña no es correcta",
+      });
+    }
+    bcrypt.compare(pass, user.password, (err, isMatch) => {
+      if (err) return res.status(500).json({ result: "KO", msg: err });
+      if (!isMatch) {
+        return res.status(401).json({
+          result: "KO",
+          msg: "El usuario no está registrado o la contraseña no es correcta",
+        });
+      }
+      user.lastLogin = Math.floor(Date.now() / 1000);
+      db.user.update(
+        { _id: user._id },
+        { $set: { lastLogin: user.lastLogin } },
+        (err) => {
+          if (err) return res.status(500).json({ result: "KO", msg: err });
+          const token = TokenHelper.creaToken(user);
+          res.json({ result: "OK", token, usuario: user });
+        },
+      );
+    });
   });
 });
 
@@ -93,7 +189,7 @@ app.put("/api/user/:id", auth, (req, res, next) => {
   const elementoId = req.params.id;
   const nuevosRegistros = req.body;
   db.user.update(
-    { _id: id(elementoId) },
+    { _id: elementoId },
     { $set: nuevosRegistros },
     { safe: true, multi: false },
     (err, result) => {
@@ -105,7 +201,7 @@ app.put("/api/user/:id", auth, (req, res, next) => {
 
 app.delete("/api/user/:id", auth, (req, res, next) => {
   const elementoId = req.params.id;
-  db.user.remove({ _id: id(elementoId) }, (err, resultado) => {
+  db.user.remove({ _id: elementoId }, (err, resultado) => {
     if (err) res.status(500).json({ result: "KO", msg: err });
     res.json(resultado);
   });
