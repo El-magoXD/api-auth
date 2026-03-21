@@ -11,6 +11,7 @@ const https = require("https");
 const helmet = require("helmet");
 const TokenHelper = require("./helpers/token.helper");
 const bcrypt = require("bcrypt");
+const AuthMiddleware = require("./middlewares/auth.middleware");
 
 // Declaraciones
 const port = config.PORT;
@@ -35,30 +36,6 @@ var allowCrossTokenHeaders = (req, res, next) => {
   return next();
 };
 
-// middleware
-var auth = (req, res, next) => {
-  const authorization = req.headers.authorization;
-  if (!authorization || !authorization.startsWith("Bearer ")) {
-    return res.status(401).json({ result: "KO", msg: "No autorizado" });
-  }
-
-  const queToken = authorization.split(" ")[1];
-
-  TokenHelper.decodificaToken(queToken).then(
-    (userID) => {
-      req.user = {
-        token: queToken,
-        id: userID,
-      };
-      return next(); // Pasamos el testigo al controlador de la ruta
-    },
-    (err) => {
-      res.status(401);
-      res.json({ result: "KO", msg: `No autorizado: ${err.msg}` });
-    },
-  );
-};
-
 // middlewares
 app.use(logger("dev")); // probar con: tiny, short, dev, common, combined
 app.use(express.urlencoded({ extended: false })); // parse application/x-www-form-urlencoded
@@ -71,14 +48,14 @@ app.use(helmet());
 
 // routes
 
-app.get("/api/user", auth, (req, res, next) => {
+app.get("/api/user", AuthMiddleware.auth, (req, res, next) => {
   db.user.find((err, coleccion) => {
     if (err) res.status(500).json({ result: "KO", msg: err });
     res.json(coleccion);
   });
 });
 
-app.get("/api/auth", auth, (req, res, next) => {
+app.get("/api/auth", AuthMiddleware.auth, (req, res, next) => {
   // Devolvemos sólo email y displayName (sin _id)
   db.user.find({}, { email: 1, displayName: 1, _id: 0 }, (err, coleccion) => {
     if (err) return res.status(500).json({ result: "KO", msg: err });
@@ -86,7 +63,7 @@ app.get("/api/auth", auth, (req, res, next) => {
   });
 });
 
-app.get("/api/user/:id", auth, (req, res, next) => {
+app.get("/api/user/:id", AuthMiddleware.auth, (req, res, next) => {
   const elementoId = req.params.id;
   db.user.findOne({ _id: elementoId }, (err, elementoRecuperado) => {
     if (err) return res.status(500).json({ result: "KO", msg: err });
@@ -94,7 +71,7 @@ app.get("/api/user/:id", auth, (req, res, next) => {
   });
 });
 
-app.get("/api/auth/me", auth, (req, res, next) => {
+app.get("/api/auth/me", AuthMiddleware.auth, (req, res, next) => {
   const elementoId = req.user.id;
   db.user.findOne({ _id: id(elementoId) }, (err, elementoRecuperado) => {
     if (err) return res.status(500).json({ result: "KO", msg: err });
@@ -177,7 +154,7 @@ app.post("/api/auth/login", (req, res, next) => {
   });
 });
 
-app.post("/api/user", auth, (req, res, next) => {
+app.post("/api/user", AuthMiddleware.auth, (req, res, next) => {
   const nuevoElemento = req.body;
   db.user.save(nuevoElemento, (err, coleccionGuardada) => {
     if (err) res.status(500).json({ result: "KO", msg: err });
@@ -185,7 +162,7 @@ app.post("/api/user", auth, (req, res, next) => {
   });
 });
 
-app.put("/api/user/:id", auth, (req, res, next) => {
+app.put("/api/user/:id", AuthMiddleware.auth, (req, res, next) => {
   const elementoId = req.params.id;
   const nuevosRegistros = req.body;
   db.user.update(
@@ -199,7 +176,7 @@ app.put("/api/user/:id", auth, (req, res, next) => {
   );
 });
 
-app.delete("/api/user/:id", auth, (req, res, next) => {
+app.delete("/api/user/:id", AuthMiddleware.auth, (req, res, next) => {
   const elementoId = req.params.id;
   db.user.remove({ _id: elementoId }, (err, resultado) => {
     if (err) res.status(500).json({ result: "KO", msg: err });
